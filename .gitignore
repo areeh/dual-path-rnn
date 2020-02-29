@@ -1,3 +1,5 @@
 exp/*
 *.pyc
 .vscode*
+.venv
+.idea
