@@ -8,25 +8,8 @@ from stat import S_IROTH
 import numpy as np
 from evaluate import Evaluator
 from network import TasnetWithDprnn
-from separate import Separator
 from train import train_network
 
-WHAM_ROOT_DIR = "/data1/ditter/speechSeparation/preprocessedData/wham/"
-
-FILE_LIST_PATH_TRAIN = os.path.join(
-    WHAM_ROOT_DIR, "create-speaker-mixtures", "mix_2_spk_min_" + "tr" + "_mix"
-)
-FILE_LIST_PATH_VALID = os.path.join(
-    WHAM_ROOT_DIR, "create-speaker-mixtures", "mix_2_spk_min_" + "cv" + "_mix"
-)
-FILE_LIST_PATH_TEST = os.path.join(
-    WHAM_ROOT_DIR, "create-speaker-mixtures", "mix_2_spk_min_" + "tt" + "_mix"
-)
-
-WAV_DIR_TRAIN = os.path.join(WHAM_ROOT_DIR, "wav8k", "min", "tr")
-WAV_DIR_VALID = os.path.join(WHAM_ROOT_DIR, "wav8k", "min", "cv")
-WAV_DIR_TEST = os.path.join(WHAM_ROOT_DIR, "wav8k", "min", "tt")
-SAMPLERATE_HZ = 8000
 
 EXPERIMENT_ROOT_DIR = "../exp/"
 EXPERIMENT_TAG = "default"
@@ -42,10 +25,6 @@ NUM_BATCHES_VALID = 400 // BATCH_SIZE
 NUM_EPOCHS = 200
 NUM_EPOCHS_FOR_EARLY_STOPPING = 10
 OPTIMIZER_CLIP_L2_NORM_VALUE = 5
-TRAIN_UTTERANCE_LENGTH_IN_SECONDS = 4
-SEPARATE_MAX_UTTERANCE_LENGTH_IN_SECONDS = (
-    14  # WHAM! test set longest WAV file length is 13.4 seconds
-)
 
 # NETWORK PARAMETERS
 NETWORK_NUM_FILTERS_IN_ENCODER = 64
@@ -60,10 +39,8 @@ def run_experiment(stage=0):
     experiment_dir = os.path.join(EXPERIMENT_ROOT_DIR, EXPERIMENT_TAG)
     wav_output_dir = os.path.join(experiment_dir, "separate")
     validation_loss_file = os.path.join(experiment_dir, "validation_loss.npy.txt")
-    train_num_full_chunks = SAMPLERATE_HZ * TRAIN_UTTERANCE_LENGTH_IN_SECONDS // NETWORK_CHUNK_SIZE
-    separate_max_num_full_chunks = (
-        SAMPLERATE_HZ * SEPARATE_MAX_UTTERANCE_LENGTH_IN_SECONDS // NETWORK_CHUNK_SIZE
-    )
+    train_num_full_chunks = 0 # SAMPLERATE_HZ * TRAIN_UTTERANCE_LENGTH_IN_SECONDS // NETWORK_CHUNK_SIZE
+    separate_max_num_full_chunks = 0 # SAMPLERATE_HZ * SEPARATE_MAX_UTTERANCE_LENGTH_IN_SECONDS // NETWORK_CHUNK_SIZE
 
     if stage <= 0:  # Start with training
         if os.path.exists(experiment_dir):
@@ -90,7 +67,6 @@ def run_experiment(stage=0):
             num_full_chunks=train_num_full_chunks,
             units_per_lstm=NETWORK_NUM_UNITS_PER_LSTM,
             num_dprnn_blocks=NETWORK_NUM_DPRNN_BLOCKS,
-            samplerate_hz=SAMPLERATE_HZ,
         )
 
         # Train network
@@ -108,12 +84,6 @@ def run_experiment(stage=0):
             num_epochs=NUM_EPOCHS,
             num_epochs_for_early_stopping=NUM_EPOCHS_FOR_EARLY_STOPPING,
             optimizer_clip_l2_norm_value=OPTIMIZER_CLIP_L2_NORM_VALUE,
-            samplerate_hz=SAMPLERATE_HZ,
-            utterance_length_in_seconds=TRAIN_UTTERANCE_LENGTH_IN_SECONDS,
-            wav_data_dir_train=WAV_DIR_TRAIN,
-            wav_data_dir_valid=WAV_DIR_VALID,
-            file_list_path_train=FILE_LIST_PATH_TRAIN,
-            file_list_path_valid=FILE_LIST_PATH_VALID,
             tasnet=tasnet,
         )
         np.savetxt(validation_loss_file, validation_loss, fmt="%.2f")
@@ -138,31 +108,19 @@ def run_experiment(stage=0):
             num_full_chunks=separate_max_num_full_chunks,
             units_per_lstm=NETWORK_NUM_UNITS_PER_LSTM,
             num_dprnn_blocks=NETWORK_NUM_DPRNN_BLOCKS,
-            samplerate_hz=SAMPLERATE_HZ,
         )
 
-        # Use network to separate list of wav files
-        separator = Separator(
-            tasnet=tasnet,
-            input_dir=os.path.join(WAV_DIR_TEST, "mix_clean"),
-            output_dir=wav_output_dir,
-            max_num_chunks=separate_max_num_full_chunks,
-        )
-        separator.process_file_list(FILE_LIST_PATH_TEST)
+        # Some output here...
 
     if stage <= 2:  # Start with evaluation
 
         # Evaluate list of separated wav files
-        evaluator = Evaluator(
-            estimate_wav_dir=wav_output_dir,
-            groundtruth_wav_dir=WAV_DIR_TEST,
-            sample_list_path=FILE_LIST_PATH_TEST,
-        )
-        print("SI-SNR Performance on Test Set:", evaluator.mean_sisnr)
+        evaluator = Evaluator()
+        print("Performance on Test Set:", evaluator.mean_some_metric)
         np.savetxt(os.path.join(experiment_dir, "results.npy.txt"), evaluator.results, fmt="%.2f")
         np.savetxt(
             os.path.join(experiment_dir, "mean_result.npy.txt"),
-            np.array([evaluator.mean_sisnr]),
+            np.array([evaluator.mean_some_metric]),
             fmt="%.2f",
         )
 

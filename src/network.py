@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import attr
 import tensorflow as tf
 from tensorflow import keras
 
@@ -5,35 +8,76 @@ from tensorflow import keras
 # including the DPRNN blocks as part of this structure.
 
 
+@attr.s(auto_attribs=True)
 class DprnnBlock(keras.layers.Layer):
-    def __init__(self, num_outputs, is_last_dprnn, tasnet_with_dprnn, **kwargs):
-        super(DprnnBlock, self).__init__(**kwargs)
-        self.num_outputs = num_outputs
-        self.is_last_dprnn = is_last_dprnn
+    num_outputs: int
+    is_last_dprnn: bool
+
+    # from Tasnet
+    batch_size: int
+    num_overlapping_chunks: int
+    chunk_size: int
+    num_filters_in_encoder: int
+    units_per_lstm: int
+
+    fc_units: int
+
+    intra_rnn: keras.layers.Bidirectional
+    intra_fc: keras.layers.Dense
+    intra_ln: keras.layers.LayerNormalization
+
+    inter_rnn: keras.layers.Bidirectional
+    inter_fc: keras.layers.Dense
+    inter_ln: keras.layers.LayerNormalization
+
+    @classmethod
+    def from_tas(cls, num_outputs, is_last_dprnn, tasnet_with_dprnn, **kwargs) -> DprnnBlock:
+        super(DprnnBlock, cls).__init__(**kwargs)
+        num_outputs = num_outputs
+        is_last_dprnn = is_last_dprnn
 
         # Copy relevant fields from Tasnet object
-        self.batch_size = tasnet_with_dprnn.batch_size
-        self.num_overlapping_chunks = tasnet_with_dprnn.num_overlapping_chunks
-        self.chunk_size = tasnet_with_dprnn.chunk_size
-        self.num_filters_in_encoder = tasnet_with_dprnn.num_filters_in_encoder
-        self.units_per_lstm = tasnet_with_dprnn.units_per_lstm
+        batch_size = tasnet_with_dprnn.batch_size
+        num_overlapping_chunks = tasnet_with_dprnn.num_overlapping_chunks
+        chunk_size = tasnet_with_dprnn.chunk_size
+        num_filters_in_encoder = tasnet_with_dprnn.num_filters_in_encoder
+        units_per_lstm = tasnet_with_dprnn.units_per_lstm
 
         if is_last_dprnn:
-            self.fc_units = self.num_filters_in_encoder * tasnet_with_dprnn.num_speakers
+            fc_units = num_filters_in_encoder * tasnet_with_dprnn.num_speakers
         else:
-            self.fc_units = self.num_filters_in_encoder
+            fc_units = num_filters_in_encoder
 
-        self.intra_rnn = keras.layers.Bidirectional(
-            keras.layers.LSTM(units=self.units_per_lstm // 2, return_sequences=True)
+        intra_rnn = keras.layers.Bidirectional(
+            keras.layers.LSTM(units=units_per_lstm // 2, return_sequences=True)
         )
-        self.intra_fc = keras.layers.Dense(units=self.num_filters_in_encoder)
-        self.intra_ln = keras.layers.LayerNormalization(center=False, scale=False)
+        intra_fc = keras.layers.Dense(units=num_filters_in_encoder)
+        intra_ln = keras.layers.LayerNormalization(center=False, scale=False)
 
-        self.inter_rnn = keras.layers.Bidirectional(
-            keras.layers.LSTM(units=self.units_per_lstm // 2, return_sequences=True)
+        inter_rnn = keras.layers.Bidirectional(
+            keras.layers.LSTM(units=units_per_lstm // 2, return_sequences=True)
         )
-        self.inter_fc = keras.layers.Dense(units=self.fc_units)
-        self.inter_ln = keras.layers.LayerNormalization(center=False, scale=False)
+        inter_fc = keras.layers.Dense(units=fc_units)
+        inter_ln = keras.layers.LayerNormalization(center=False, scale=False)
+
+        instance = cls(
+            num_outputs=num_outputs,
+            is_last_dprnn=is_last_dprnn,
+            batch_size=batch_size,
+            num_overlapping_chunks=num_overlapping_chunks,
+            chunk_size=chunk_size,
+            num_filters_in_encoder=num_filters_in_encoder,
+            units_per_lstm=units_per_lstm,
+            fc_units=fc_units,
+            intra_rnn=intra_rnn,
+            intra_fc=intra_fc,
+            intra_ln=intra_ln,
+            inter_rnn=inter_rnn,
+            inter_fc=inter_fc,
+            inter_ln=inter_ln,
+        )
+
+        return instance
 
     def call(self, T):
         # Intra-Chunk Processing
@@ -111,7 +155,6 @@ class TasnetWithDprnn:
         num_full_chunks,
         units_per_lstm,
         num_dprnn_blocks,
-        samplerate_hz,
     ):
         self.batch_size = batch_size
         self.model_weights_file = model_weights_file
@@ -125,8 +168,6 @@ class TasnetWithDprnn:
         self.chunk_advance = chunk_size // 2
         self.units_per_lstm = units_per_lstm
         self.num_overlapping_chunks = num_full_chunks * 2 - 1
-        self.num_speakers = 2
-        self.samplerate_hz = samplerate_hz
         self.model = self.generate_model()
 
     def segment_encoded_signal(self, x):
@@ -180,7 +221,7 @@ class TasnetWithDprnn:
         dprnn_in_out = keras.layers.Lambda(self.segment_encoded_signal)(encoded)
         # Dual-Path RNN blocks
         for b in range(1, self.num_dprnn_blocks + 1):
-            dprnn_in_out = DprnnBlock(
+            dprnn_in_out = DprnnBlock.from_tas(
                 1, is_last_dprnn=(b == self.num_dprnn_blocks), tasnet_with_dprnn=self
             )(dprnn_in_out)
         # Overlap + add mask segments

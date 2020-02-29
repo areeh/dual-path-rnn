@@ -42,7 +42,6 @@ TRAIN_UTTERANCE_LENGTH_IN_SECONDS = 4
 SEPARATE_MAX_UTTERANCE_LENGTH_IN_SECONDS = 14
 
 # NETWORK PARAMETERS
-NETWORK_IS_CAUSAL = False
 NETWORK_NUM_FILTERS_IN_ENCODER = 64
 NETWORK_ENCODER_FILTER_LENGTH = 2
 NETWORK_NUM_UNITS_PER_LSTM = 200
@@ -77,7 +76,6 @@ def run_experiment(stage=0):
         # Generate network
         tasnet = TasnetWithDprnn(
             batch_size=BATCH_SIZE,
-            is_causal=NETWORK_IS_CAUSAL,
             model_weights_file=model_weights_file,
             num_filters_in_encoder=NETWORK_NUM_FILTERS_IN_ENCODER,
             encoder_filter_length=NETWORK_ENCODER_FILTER_LENGTH,
@@ -85,7 +83,6 @@ def run_experiment(stage=0):
             num_full_chunks=train_num_full_chunks,
             units_per_lstm=NETWORK_NUM_UNITS_PER_LSTM,
             num_dprnn_blocks=NETWORK_NUM_DPRNN_BLOCKS,
-            samplerate_hz=SAMPLERATE_HZ,
         )
 
         # Train network
@@ -103,7 +100,6 @@ def run_experiment(stage=0):
             num_epochs=NUM_EPOCHS,
             num_epochs_for_early_stopping=NUM_EPOCHS_FOR_EARLY_STOPPING,
             optimizer_clip_l2_norm_value=OPTIMIZER_CLIP_L2_NORM_VALUE,
-            samplerate_hz=SAMPLERATE_HZ,
             utterance_length_in_seconds=TRAIN_UTTERANCE_LENGTH_IN_SECONDS,
             wav_data_dir_train=WAV_DIR_TRAIN,
             wav_data_dir_valid=WAV_DIR_VALID,
@@ -126,7 +122,6 @@ def run_experiment(stage=0):
         # Generate trained network
         tasnet = TasnetWithDprnn(
             batch_size=1,
-            is_causal=NETWORK_IS_CAUSAL,
             model_weights_file=model_weights_file,
             num_filters_in_encoder=NETWORK_NUM_FILTERS_IN_ENCODER,
             encoder_filter_length=NETWORK_ENCODER_FILTER_LENGTH,
@@ -134,7 +129,6 @@ def run_experiment(stage=0):
             num_full_chunks=separate_max_num_full_chunks,
             units_per_lstm=NETWORK_NUM_UNITS_PER_LSTM,
             num_dprnn_blocks=NETWORK_NUM_DPRNN_BLOCKS,
-            samplerate_hz=SAMPLERATE_HZ,
         )
 
         # Use network to separate list of wav files
